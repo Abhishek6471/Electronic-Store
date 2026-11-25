@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+// SQLite has no native enum or Json types; roles/statuses are stored as strings
+// and JSON payloads as TEXT. Values written to the DB always come from server
+// code or zod enums, never raw client input.
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  passwordHash   String
+  name           String
+  phone          String?
+  role           String         @default("USER")
+  isSeller       Boolean        @default(false)
+  sellerVerified Boolean        @default(false)
+  storeName      String?
+  status         String         @default("ACTIVE")
+  emailVerified  Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  sessions       Session[]
+  products       Product[]
+  orders         Order[]
+  cart           CartItem[]
+  wishlist       WishlistItem[]
+  reviews        Review[]
+  exchanges      Exchange[]
+  inquiries      Inquiry[]
+}
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+model Category {
+  id       String    @id
+  name     String
+  icon     String?
+  products Product[]
+}
+model Product {
+  id            String          @id
+  name          String
+  brand         String
+  categoryId    String
+  price         Int
+  previousPrice Int
+  condition     String
+  description   String
+  specs         String          @default("{}")
+  stock         Int
+  rating        Float           @default(0)
+  location      String
+  warranty      String
+  status        String          @default("PENDING")
+  sellerId      String
+  createdAt     DateTime        @default(now())
+  category      Category        @relation(fields: [categoryId], references: [id])
+  seller        User            @relation(fields: [sellerId], references: [id])
+  images        ProductImage[]
+  cart          CartItem[]
+  wishlist      WishlistItem[]
+  reviews       Review[]
+  items         OrderItem[]
+  inquiries     Inquiry[]
+  @@index([categoryId])
+  @@index([status, price])
+  @@index([sellerId])
+}
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  url       String
+  isMain    Boolean @default(false)
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@index([productId])
+}
+model CartItem {
+  id        String  @id @default(cuid())
+  userId    String
+  productId String
+  qty       Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([userId, productId])
+}
+model WishlistItem {
+  id        String  @id @default(cuid())
+  userId    String
+  productId String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([userId, productId])
+}
+model Order {
+  id             String      @id @default(cuid())
+  userId         String
+  idempotencyKey String      @unique
+  status         String      @default("PENDING")
+  paymentMethod  String
+  paymentStatus  String      @default("UNPAID")
+  subtotal       Int
+  delivery       Int
+  total          Int
+  address        String
+  createdAt      DateTime    @default(now())
+  user           User        @relation(fields: [userId], references: [id])
+  items          OrderItem[]
+  payments       Payment[]
+  @@index([userId])
+}
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  name      String
+  price     Int
+  qty       Int
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+}
+model Payment {
+  id       String    @id @default(cuid())
+  orderId  String
+  provider String
+  status   String    @default("PENDING")
+  ref      String?   @unique
+  raw      String?
+  createdAt DateTime @default(now())
+  order    Order     @relation(fields: [orderId], references: [id])
+}
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  rating    Int
+  text      String
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([userId, productId])
+}
+model Exchange {
+  id        String   @id @default(cuid())
+  userId    String
+  device    String
+  wantId    String?
+  status    String   @default("PENDING")
+  offer     Int?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+model Inquiry {
+  id        String   @id @default(cuid())
+  userId    String?
+  productId String?
+  name      String
+  email     String
+  message   String
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+  product   Product? @relation(fields: [productId], references: [id])
+}
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  target    String?
+  meta      String?
+  createdAt DateTime @default(now())
+}
+model Setting {
+  key   String @id
+  value String
+}

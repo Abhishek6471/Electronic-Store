@@ -1,0 +1,63 @@
+// End-to-end smoke test against a RUNNING server (npm run dev) with a SEEDED database. Needs Node 18+.
+const BASE = process.env.BASE || 'http://localhost:4000', SEED_PW = process.env.SEED_PASSWORD || 'ChangeMe!2026';
+let pass = 0, fail = 0;
+const ok = (c, name, extra = '') => { c ? pass++ : fail++; console.log((c ? '  PASS ' : '  FAIL ') + name + (c ? '' : '  ' + extra)); };
+function client() { const jar = {}; return async (path, { method = 'GET', body, csrf = true } = {}) => {
+  const h = { 'Content-Type': 'application/json' }; if (csrf) h['X-Requested-With'] = 'fetch';
+  const ck = Object.entries(jar).map(([k, v]) => k + '=' + v).join('; '); if (ck) h.Cookie = ck;
+  const r = await fetch(BASE + '/api' + path, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
+  for (const sc of r.headers.getSetCookie?.() || []) { const [kv] = sc.split(';'), i = kv.indexOf('='), k = kv.slice(0, i), v = kv.slice(i + 1); if (v) jar[k] = v; else delete jar[k]; }
+  let data = {}; try { data = await r.json(); } catch {} return { status: r.status, data, raw: r };
+}; }
+const addr = { name: 'Test Buyer', phone: '9812345678', email: 'buyer@example.com', province: 'Bagmati', district: 'Kathmandu', city: 'Kathmandu', address: 'Thamel Marg 12' };
+const order = (key, items, extra = {}) => ({ idempotencyKey: key, paymentMethod: 'COD', items, address: addr, ...extra });
+(async () => {
+  const a = client(), email = `smoke+${Date.now()}@example.com`, run = Date.now().toString(36);
+  console.log('Catalog'); let r = await a('/categories'); ok(r.status === 200 && r.data.length >= 8, 'categories list', JSON.stringify(r.data).slice(0, 80));
+  r = await a('/products?limit=5'); ok(r.status === 200 && r.data.items.length === 5 && r.data.total >= 24, 'products paginate (5 of 24+)', r.status);
+  const p1 = r.data.items[0]; ok(p1.price > 0 && Array.isArray(p1.images), 'product shape');
+  r = await a('/products?category=laptops'); ok(r.data.items.length > 0 && r.data.items.every(p => p.category === 'laptops'), 'filter by category');
+  r = await a('/products?q=dell'); ok(r.data.items.length > 0 && r.data.items.every(p => /dell/i.test(p.name + p.brand)), 'search q=dell');
+  r = await a('/products?minPrice=20000&maxPrice=40000&limit=48'); ok(r.data.items.length > 0 && r.data.items.every(p => p.price >= 20000 && p.price <= 40000), 'price range filter');
+  r = await a('/products?brand=Apple,Sony&condition=Like New'); ok(r.data.items.length > 0 && r.data.items.every(p => ['Apple', 'Sony'].includes(p.brand) && p.condition === 'Like New'), 'brand + condition filters');
+  r = await a('/products?sort=low&limit=48'); ok(r.data.items.every((p, i, x) => !i || x[i - 1].price <= p.price), 'sort price low to high');
+  const d1 = (await a('/products?sort=discount&limit=12&page=1')).data, d2 = (await a('/products?sort=discount&limit=12&page=2')).data, dd = p => 1 - p.price / p.previousPrice;
+  ok(dd(d1.items.at(-1)) >= dd(d2.items[0]) - 1e-9, 'discount sort holds across pages');
+  r = await a('/products/p1'); ok(r.status === 200 && r.data.id === 'p1', 'product detail'); r = await a('/products/nope'); ok(r.status === 404, 'unknown product is 404');
+  r = await a('/products?minPrice=abc'); ok(r.status === 400, 'bad query is 400');
+  console.log('Auth');
+  r = await a('/auth/register', { method: 'POST', csrf: false, body: { name: 'Smoke Test', email, password: 'Passw0rd!x' } }); ok(r.status === 403, 'register without CSRF header blocked', r.status);
+  r = await a('/auth/register', { method: 'POST', body: { name: 'S', email: 'bad', password: '123' } }); ok(r.status === 400, 'register validation');
+  r = await a('/auth/register', { method: 'POST', body: { name: 'Smoke Test', email, password: 'Passw0rd!x', role: 'SUPER_ADMIN' } }); ok(r.status === 201 && r.data.user.role === 'USER', 'register works and ignores role injection', JSON.stringify(r.data));
+  ok(!JSON.stringify(r.data).includes('passwordHash'), 'no password hash in response');
+  r = await a('/auth/register', { method: 'POST', body: { name: 'Smoke Test', email, password: 'Passw0rd!x' } }); ok(r.status === 409, 'duplicate email blocked');
+  r = await a('/auth/me'); ok(r.data.user?.email === email, 'session persists (me)');
+  await a('/auth/logout', { method: 'POST' }); r = await a('/auth/me'); ok(r.data.user === null, 'logout clears session');
+  r = await a('/auth/login', { method: 'POST', body: { email, password: 'wrongpass1' } }); ok(r.status === 401, 'wrong password rejected');
+  r = await a('/auth/login', { method: 'POST', body: { email, password: 'Passw0rd!x' } }); ok(r.status === 200 && r.data.user.email === email, 'login works');
+  const ckh = r.raw.headers.get('set-cookie') || ''; ok(/HttpOnly/i.test(ckh) && /SameSite=Lax/i.test(ckh), 'session cookie is HttpOnly + SameSite=Lax', ckh);
+  const anon = client(); r = await anon('/orders'); ok(r.status === 401, 'orders require login');
+  console.log('Orders');
+  const P = (await a('/products/p7')).data, stock0 = P.stock, qty = 2;
+  r = await a('/orders', { method: 'POST', body: order('k-' + run + '-1', [{ productId: 'p7', qty }], { price: 1, total: 1, subtotal: 1 }) });
+  const expSub = P.price * qty, expDel = expSub >= 50000 ? 0 : 200;
+  ok(r.status === 201 && r.data.subtotal === expSub && r.data.total === expSub + expDel, 'server recalculates price (tampered total ignored)', JSON.stringify(r.data).slice(0, 160));
+  ok((await a('/products/p7')).data.stock === stock0 - qty, 'stock decreased by quantity');
+  const oid = r.data.id; r = await a('/orders', { method: 'POST', body: order('k-' + run + '-1', [{ productId: 'p7', qty }]) });
+  ok(r.data.id === oid && (await a('/products/p7')).data.stock === stock0 - qty, 'same idempotency key does not create a second order');
+  r = await a('/orders', { method: 'POST', body: order('k-' + run + '-2', [{ productId: 'p7', qty: 20 }]) }); ok(r.status === 409 && (await a('/products/p7')).data.stock === stock0 - qty, 'insufficient stock rejected, stock unchanged', r.status);
+  r = await a('/orders', { method: 'POST', body: order('k-' + run + '-3', [{ productId: 'p7', qty: 1 }], { paymentMethod: 'ESEWA' }) }); ok(r.status === 501, 'eSewa honestly reports not configured');
+  r = await a('/orders', { method: 'POST', body: order('k-' + run + '-4', [{ productId: 'p7', qty: 1 }], { address: { ...addr, phone: '123' } }) }); ok(r.status === 400, 'invalid phone rejected');
+  r = await a('/orders', { method: 'POST', body: order('k-' + run + '-5', [{ productId: 'nope', qty: 1 }]) }); ok(r.status === 400, 'unknown product rejected');
+  r = await a('/orders'); ok(r.data.some(o => o.id === oid), 'order appears in history');
+  r = await a('/orders/' + oid + '/cancel', { method: 'POST' }); ok(r.status === 200 && r.data.status === 'CANCELLED', 'cancel order');
+  ok((await a('/products/p7')).data.stock === stock0, 'cancel restores stock');
+  r = await a('/orders/' + oid + '/cancel', { method: 'POST' }); ok(r.status === 409 && (await a('/products/p7')).data.stock === stock0, 'second cancel rejected, stock not restored twice');
+  console.log('Overselling race (p12 has the lowest stock)');
+  const S = (await a('/products/p12')).data.stock, res = await Promise.all(Array.from({ length: S + 4 }, (_, i) => a('/orders', { method: 'POST', body: order(`race-${run}-${i}`, [{ productId: 'p12', qty: 1 }]) })));
+  const wins = res.filter(x => x.status === 201); ok(wins.length === S && (await a('/products/p12')).data.stock === 0, `exactly ${S} of ${S + 4} parallel orders succeed, stock ends at 0`, wins.length);
+  for (const w of wins) await a('/orders/' + w.data.id + '/cancel', { method: 'POST' });
+  console.log('Seller cannot buy own listing'); const sl = client(); r = await sl('/auth/login', { method: 'POST', body: { email: 'seller@retech.local', password: SEED_PW } });
+  if (r.status === 200) { r = await sl('/orders', { method: 'POST', body: order('own-' + run, [{ productId: 'p1', qty: 1 }]) }); ok(r.status === 400, 'own listing purchase blocked'); } else console.log('  SKIP seed seller login failed (set SEED_PASSWORD)');
+  console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
+})().catch(e => { console.error('\nCould not complete. Is the server running at ' + BASE + ' and the database seeded?\n', e.cause?.code || e.message); process.exit(2); });

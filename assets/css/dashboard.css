@@ -1,0 +1,23 @@
+/* Phases 4-5: accounts, seller dashboard, exchange */
+.auth-card{max-width:520px;margin:0 auto var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s3)}
+.auth-card .grid2,.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-bottom:var(--s2)}.grid2 .full,.full{grid-column:1/-1}
+.addr{display:flex;justify-content:space-between;gap:1rem;padding:.4rem 0;border-bottom:1px solid var(--line)}
+form.inline{display:flex;gap:.5rem;margin-top:.8rem}form.inline input{flex:1;padding:.55rem .8rem;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg);color:var(--text);font:inherit}
+.st{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:.1rem .7rem;font-size:.8rem;font-weight:700}
+.st.delivered,.st.completed,.st.accepted,.st.approved,.st.offer{background:#D1FADF;color:#05603A;border-color:#D1FADF}.st.cancelled,.st.rejected{background:#FEE4E2;color:#B42318;border-color:#FEE4E2}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s2);margin-bottom:var(--s3)}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:var(--s2)}.stat b{display:block;font-size:1.6rem}.stat span{color:var(--muted);font-size:.88rem}
+.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}.tbl{width:100%;border-collapse:collapse;min-width:560px}
+.tbl th,.tbl td{padding:.7rem;text-align:left;border-bottom:1px solid var(--line);font-size:.9rem}.tbl th{color:var(--muted);background:var(--bg)}
+.tbl input[type=number],.tbl select{width:90px;padding:.3rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:inherit}.tbl select{width:auto}
+.ximgs{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem}.ximgs img{width:64px;height:48px;object-fit:cover;border-radius:6px}
+.req{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:var(--s2);margin-bottom:var(--s2)}
+@media(max-width:820px){.stats{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+/* Phase 6: admin */
+.admin{display:grid;grid-template-columns:220px 1fr;gap:var(--s3);align-items:start;padding-bottom:var(--s4)}
+.side{background:var(--navy);border-radius:var(--r);padding:.6rem;position:sticky;top:84px}.side button{display:block;width:100%;text-align:left;color:#B8C2D6;padding:.55rem .8rem;border-radius:var(--r-sm);font-size:.92rem}
+.side button:hover{background:#1B2740}.side button.on{background:var(--green);color:#fff}
+.bars{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:var(--s2);margin-bottom:var(--s2)}.bars h3{font-size:1rem;margin-bottom:.6rem}
+.bar{display:grid;grid-template-columns:110px 1fr 70px;gap:.6rem;align-items:center;font-size:.85rem;margin:.3rem 0}.bar i{display:block;height:14px;border-radius:7px;background:var(--green)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+@media(max-width:820px){.admin{grid-template-columns:1fr}.side{position:static;display:flex;overflow-x:auto;gap:.3rem}.side button{white-space:nowrap;width:auto}.two{grid-template-columns:1fr}}
